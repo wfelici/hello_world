@@ -14,11 +14,16 @@ lavoro resta quello di Calc.
 | File | A cosa serve |
 |---|---|
 | `ods_a_sqlite.py` | Crea il database leggendo il foglio "Tutti" del file ODS |
+| `crea_anagrafica_ditte.py` | Crea la tabella dei soggetti usando P.IVA e Codice Fiscale e collega le richieste |
 | `prova_concorrenza.py` | Prova di scrittura contemporanea da due PC |
 | `backup_sqlite.py` | Copia di sicurezza del database, valida anche mentre è in uso |
 
 Gli script usano solo la libreria standard di Python: WinPython va bene
 così com'è, senza installare pacchetti.
+
+Tutti i file vanno copiati **sul PC dell'ufficio**, dove ci sono il file
+ODS, la cartella condivisa e WinPython: chiavetta, posta oppure download
+da GitHub. Lì vanno salvati nella stessa cartella e lanciati.
 
 ---
 
@@ -54,6 +59,66 @@ Note:
   scritta male risulta `NESSUNA RICHIESTA` finché non la correggete.
 - Per ripetere l'importazione da capo aggiungete `--sovrascrivi`.
   **Attenzione:** cancella tutto quello che avete inserito nel database.
+
+## Passo 1b: anagrafica delle ditte (P.IVA e Codice Fiscale)
+
+```
+python crea_anagrafica_ditte.py --db "\\server\condivisa\prova\verifiche.sqlite"
+```
+
+Lo script riconosce le colonne dei codici anche se l'intestazione è
+scritta in modi diversi (`PARTITA IVA`, `P. IVA`, `CODICE FISCALE`,
+`C.F.`…). Le regole sono queste:
+
+- due righe sono **lo stesso soggetto** se hanno la stessa P.IVA **o** lo
+  stesso Codice Fiscale validi. Così "ALFA S.R.L." e "Alfa Srl" con la
+  stessa P.IVA diventano un solo soggetto;
+- il **nome non serve mai a unire**: due "ESPOSITO MARIO" con codici fiscali
+  diversi restano due soggetti;
+- ogni codice viene controllato con la sua **cifra di controllo**, quindi
+  gli errori di battitura vengono trovati;
+- se una P.IVA ha perso gli **zeri iniziali** (cella trattata come numero
+  da Calc), lo script li rimette e lo segnala.
+
+Lo script crea queste tabelle:
+
+| Nome | Contenuto |
+|---|---|
+| `ditte` | Un soggetto per riga: denominazione, P.IVA, Codice Fiscale, tipo (società/ente o persona fisica) |
+| `ditte_nomi` | Tutti i modi in cui il nome di ciascun soggetto è scritto nel foglio |
+| `richieste.ditta_id` | Nuova colonna: collega ogni richiesta al suo soggetto |
+| `revisione_ditte` | Casi da controllare a mano, salvati anche nel file `revisione_ditte.csv` accanto al database |
+
+Relazioni:
+
+```
+ditte (id) ──1───N── richieste (ditta_id)
+   │
+   └──1───N── ditte_nomi (ditta_id)
+```
+
+Anche le viste `v_stato_attuale` e `v_in_scadenza_30gg` ora raggruppano
+per soggetto e mostrano P.IVA e Codice Fiscale.
+
+**Come usare `revisione_ditte.csv`** (si apre direttamente con Calc):
+
+| Problema | Cosa fare |
+|---|---|
+| Partita IVA / Codice fiscale non valido | Correggere il codice nel foglio |
+| Nessun codice valido | Inserire P.IVA o CF nella riga indicata. Se lo script suggerisce un soggetto con lo stesso nome, controllate che sia davvero lui |
+| Stesso soggetto collegato a codici diversi | Errore di battitura, oppure il soggetto ha davvero cambiato P.IVA |
+| Stesso nome con codici diversi | Omonimi (va bene così) oppure un codice sbagliato |
+| INFORMAZIONE: zeri iniziali aggiunti | Lo script ha già corretto. Conviene sistemare anche il foglio, formattando la colonna come testo |
+
+Dopo le correzioni nel foglio, rilanciate entrambi gli script:
+`ods_a_sqlite.py` con `--sovrascrivi`, poi `crea_anagrafica_ditte.py`.
+Lo script ricostruisce l'anagrafica da capo, quindi si può rilanciare
+quante volte serve.
+
+**Attenzione:** serve solo durante la migrazione. Lo script si rifiuta di
+ripartire se nel database ci sono richieste inserite da Base e già
+collegate a un soggetto, perché ricostruire l'anagrafica perderebbe quei
+collegamenti.
 
 ## Passo 2: prova di scrittura contemporanea (la più importante)
 
@@ -119,6 +184,7 @@ alternativa:
    "Driver"="C:\\Users\\<utente>\\sqliteodbc\\sqlite3odbc.dll"
    "Database"="\\\\server\\condivisa\\prova\\verifiche.sqlite"
    "Timeout"="10000"
+   "FKSupport"="1"
 
    [HKEY_CURRENT_USER\Software\ODBC\ODBC.INI\ODBC Data Sources]
    "verifiche"="SQLite3 ODBC Driver"
@@ -129,7 +195,8 @@ alternativa:
    l'amministratore.
 6. Il collega ripete i punti 2–5 sul suo PC.
 
-`Timeout=10000` significa che, se il collega sta scrivendo proprio in quel
+`FKSupport=1` fa vedere a Base le relazioni tra le tabelle (es. richieste
+→ ditte). `Timeout=10000` significa che, se il collega sta scrivendo proprio in quel
 momento, Base aspetta fino a 10 secondi invece di dare subito errore.
 
 Se questa strada non funziona (Base non vede l'origine dati "verifiche",
@@ -239,7 +306,9 @@ python backup_sqlite.py --db "\\server\condivisa\prova\verifiche.sqlite" --carte
 - Se il driver ODBC era già presente o se ha funzionato la strada senza
   installazione (punto 3b).
 - Il numero di righe in `anomalie_import`.
+- Il riepilogo stampato da `crea_anagrafica_ditte.py` e quanti casi ci
+  sono in `revisione_ditte.csv`.
 - Se il formulario di prova funziona per entrambi contemporaneamente.
 
 Con questi risultati si può decidere se migrare davvero la procedura e
-progettare le tabelle definitive (ditte, interventi, richieste separate).
+completare le tabelle definitive (interventi e partecipazioni agli RTI).

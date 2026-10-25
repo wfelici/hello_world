@@ -71,6 +71,25 @@ COLONNE_NOTE = {
     "NOTE/CRITICITÀ": ("note", "TEXT"),
 }
 
+# Colonne riconosciute anche se l'intestazione è scritta in modi diversi.
+# Il confronto avviene sull'intestazione ridotta a sole lettere e cifre
+# maiuscole (es. "P. IVA" -> "PIVA", "C.F." -> "CF").
+ALIAS_COLONNE = {
+    "PARTITAIVA": "partita_iva",
+    "PIVA": "partita_iva",
+    "CODICEFISCALE": "codice_fiscale",
+    "CF": "codice_fiscale",
+    # una sola colonna che contiene l'uno o l'altro codice
+    "CFPIVA": "cf_piva",
+    "PIVACF": "cf_piva",
+    "CODICEFISCALEPARTITAIVA": "cf_piva",
+    "PARTITAIVACODICEFISCALE": "cf_piva",
+    "CODICEFISCALEPIVA": "cf_piva",
+    "PIVACODICEFISCALE": "cf_piva",
+    "CFPARTITAIVA": "cf_piva",
+    "PARTITAIVACF": "cf_piva",
+}
+
 # Colonne indispensabili per le viste di stato
 COLONNE_OBBLIGATORIE = ["ditta", "tipo_richiesta", "data_richiesta", "ricevuto", "data_scadenza"]
 
@@ -221,15 +240,20 @@ def definisci_colonne(intestazioni, righe):
     for i, intest in enumerate(intestazioni):
         if not intest:
             continue
+        compatta = re.sub(r"[^A-Z0-9]", "", nome_sql(intest).upper())
         if intest in COLONNE_NOTE:
             nome, tipo = COLONNE_NOTE[intest]
+        elif compatta in ALIAS_COLONNE:
+            # codici fiscali e partite IVA restano sempre testo
+            nome, tipo = ALIAS_COLONNE[compatta], "TEXT"
         else:
             nome = nome_sql(intest)
             # colonna non prevista: è una data se TUTTI i valori lo sono
             valori = [r[1][i] for r in righe if i < len(r[1]) and r[1][i].testo]
             tipo = "DATE" if valori and all(valore_data(c)[1] for c in valori) else "TEXT"
         base, n = nome, 2
-        while nome in usati or nome in ("id", "riga_ods"):
+        # "ditta_id" è riservata alla colonna aggiunta da crea_anagrafica_ditte.py
+        while nome in usati or nome in ("id", "riga_ods", "ditta_id"):
             nome = f"{base}_{n}"
             n += 1
         usati.add(nome)
