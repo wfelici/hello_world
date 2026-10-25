@@ -41,7 +41,7 @@ Da un Prompt dei comandi (non serve essere amministratore), sostituendo il
 percorso dello script; esempio: ogni giorno feriale alle 17:30:
 
 ```bat
-schtasks /Create /TN "Sincronizza file su Google Drive" /SC WEEKLY /D LUN,MAR,MER,GIO,VEN /ST 17:30 /TR "\"C:\Script\sincronizza_file_gdrive.bat\" /silenzioso"
+schtasks /Create /TN "Sincronizza file su Google Drive" /SC WEEKLY /D MON,TUE,WED,THU,FRI /ST 17:30 /TR "\"C:\Script\sincronizza_file_gdrive.bat\" /silenzioso"
 ```
 
 Oppure ogni ora durante la giornata lavorativa:
@@ -57,5 +57,4 @@ In alternativa, dall'interfaccia grafica: *Utilità di pianificazione* →
 *Crea attività di base* → Azione *Avvia programma* → programma: il file `.bat`,
 argomenti: `/silenzioso`.
 
-Se nella tua versione di Windows in inglese i giorni non vengono accettati,
-usa `MON,TUE,WED,THU,FRI`.
+I giorni vanno scritti in inglese (`MON,TUE,WED,THU,FRI`) anche su Windows in italiano.
