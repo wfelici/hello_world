@@ -2,27 +2,46 @@
 setlocal
 
 rem ==========================================================================
-rem  Sincronizza un file dalla cartella condivisa dell'ufficio a Google Drive
+rem  Copia un file dalla cartella condivisa dell'ufficio direttamente su
+rem  Google Drive (cloud), senza installare Google Drive per desktop.
 rem
-rem  Requisito: Google Drive per desktop installato e con accesso effettuato
-rem  (https://www.google.com/drive/download/). Lo script copia il file nella
-rem  cartella di Drive montata come unita' (di solito G:), poi e' Drive per
-rem  desktop a caricarlo in automatico sul cloud.
+rem  Usa rclone (https://rclone.org), un singolo eseguibile che NON richiede
+rem  installazione ne' diritti di amministratore: basta mettere rclone.exe
+rem  nella stessa cartella di questo script.
 rem
-rem  Il file viene copiato solo se e' cambiato (data/dimensione diverse).
+rem  Il file viene caricato solo se e' cambiato (data/dimensione diverse).
 rem ==========================================================================
 
-rem ---- CONFIGURAZIONE (modifica queste tre righe) --------------------------
+rem ---- CONFIGURAZIONE (modifica queste righe) ------------------------------
 set "CARTELLA_ORIGINE=\\server\condivisa\Ufficio"
 set "NOME_FILE=monitoraggio_verifiche.ods"
-set "CARTELLA_DESTINAZIONE=G:\Il mio Drive\Ufficio"
+rem Cartella su Google Drive (verra' creata se non esiste)
+set "CARTELLA_DRIVE=Ufficio"
+rem Nome del collegamento creato con "rclone config"
+set "REMOTO=gdrive"
 rem --------------------------------------------------------------------------
 
+set "RCLONE=%~dp0rclone.exe"
+set "RCLONE_CONF=%~dp0rclone.conf"
 set "LOG=%~dp0sincronizza_file_gdrive.log"
 
 echo.
-echo [%date% %time%] Avvio sincronizzazione di "%NOME_FILE%"
-echo [%date% %time%] Avvio sincronizzazione di "%NOME_FILE%" >> "%LOG%"
+echo [%date% %time%] Avvio caricamento di "%NOME_FILE%"
+echo [%date% %time%] Avvio caricamento di "%NOME_FILE%" >> "%LOG%"
+
+if not exist "%RCLONE%" (
+    echo ERRORE: rclone.exe non trovato in "%~dp0"
+    echo   Scaricalo da https://rclone.org/downloads/ e mettilo accanto allo script.
+    echo [%date% %time%] ERRORE: rclone.exe mancante >> "%LOG%"
+    goto :fine_errore
+)
+
+if not exist "%RCLONE_CONF%" (
+    echo ERRORE: configurazione non trovata: "%RCLONE_CONF%"
+    echo   Esegui prima configura_google_drive.bat
+    echo [%date% %time%] ERRORE: rclone.conf mancante >> "%LOG%"
+    goto :fine_errore
+)
 
 if not exist "%CARTELLA_ORIGINE%\%NOME_FILE%" (
     echo ERRORE: file di origine non trovato:
@@ -32,31 +51,17 @@ if not exist "%CARTELLA_ORIGINE%\%NOME_FILE%" (
     goto :fine_errore
 )
 
-for %%D in ("%CARTELLA_DESTINAZIONE%") do set "UNITA_DRIVE=%%~dD"
-if not exist "%UNITA_DRIVE%\" (
-    echo ERRORE: l'unita' %UNITA_DRIVE% di Google Drive non e' disponibile.
-    echo   Avvia Google Drive per desktop ed effettua l'accesso.
-    echo [%date% %time%] ERRORE: unita' %UNITA_DRIVE% non disponibile >> "%LOG%"
-    goto :fine_errore
-)
+rem copyto carica il file solo se e' diverso da quello gia' presente su Drive
+"%RCLONE%" copyto "%CARTELLA_ORIGINE%\%NOME_FILE%" "%REMOTO%:%CARTELLA_DRIVE%/%NOME_FILE%" ^
+    --config "%RCLONE_CONF%" --retries 5 --low-level-retries 10 ^
+    --stats-one-line -v --log-file "%LOG%"
 
-if not exist "%CARTELLA_DESTINAZIONE%\" mkdir "%CARTELLA_DESTINAZIONE%"
-
-rem /R:5 /W:10 = in caso di file bloccato riprova 5 volte ogni 10 secondi
-robocopy "%CARTELLA_ORIGINE%" "%CARTELLA_DESTINAZIONE%" "%NOME_FILE%" /R:5 /W:10 /NP /NJH /NJS /TEE /LOG+:"%LOG%"
-
-rem robocopy: codici da 0 a 7 = successo, da 8 in su = errore
-if errorlevel 8 (
-    echo ERRORE durante la copia, vedi il log: "%LOG%"
-    goto :fine_errore
-)
 if errorlevel 1 (
-    echo OK: file aggiornato su Google Drive.
-    echo [%date% %time%] OK: file copiato >> "%LOG%"
-) else (
-    echo OK: il file su Google Drive era gia' aggiornato.
-    echo [%date% %time%] OK: nessuna modifica >> "%LOG%"
+    echo ERRORE durante il caricamento, vedi il log: "%LOG%"
+    goto :fine_errore
 )
+echo OK: il file su Google Drive e' aggiornato.
+echo [%date% %time%] OK >> "%LOG%"
 goto :fine
 
 :fine_errore
